@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sorteador de Números</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+        }
+
+        .main-container {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+        }
+
+        .lottery-box {
+            display: flex;
+            background-color: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            width: 100%;
+            max-width: 900px;
+        }
+
+        .commemorative-banner {
+            background-color: #2c3e50;
+            color: #ffffff;
+            padding: 2.5rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            width: 40%;
+            min-width: 250px;
+        }
+
+        .lottery-section {
+            padding: 2.5rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 60%;
+        }
+
+        /* Estilo do Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+        }
+
+        .modal-content {
+            background-color: #2c3e50;
+            color: #ffffff;
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+            transform: scale(0.8);
+            opacity: 0;
+            animation: modal-scale-in 0.3s forwards;
+        }
+
+        @keyframes modal-scale-in {
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .winning-number {
+            font-size: 6rem;
+            font-weight: bold;
+            color: #2ecc71;
+        }
+        
+        /* Animação de pulso para o número final */
+        .pulse-animation {
+            animation: pulse 1s infinite alternate;
+        }
+
+        @keyframes pulse {
+            from {
+                transform: scale(1);
+            }
+            to {
+                transform: scale(1.1);
+            }
+        }
+
+        /* Responsividade */
+        @media (max-width: 768px) {
+            .lottery-box {
+                flex-direction: column;
+            }
+            .commemorative-banner, .lottery-section {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div class="main-container">
+        <div class="lottery-box">
+            <!-- Banner Comemorativo -->
+            <div class="commemorative-banner">
+                <h2 class="text-3xl font-bold mb-4">Banner Comemorativo</h2>
+                <p class="text-xl">Com características de sorte</p>
+            </div>
+
+            <!-- Parte do Sorteio -->
+            <div class="lottery-section">
+                <h1 class="text-4xl font-bold text-gray-800 mb-2">Sorteio Premiado!</h1>
+                <p class="text-lg text-gray-600 mb-8">
+                    Carregue a sua lista de participantes em formato JSON.
+                </p>
+                
+                <div class="mb-6 flex flex-col items-center">
+                    <input type="file" id="file-input" accept=".json" class="mb-2">
+                    <p id="file-status-message" class="text-sm font-semibold text-gray-500"></p>
+                </div>
+                
+                <button id="draw-button" class="bg-blue-600 text-white font-bold py-3 px-6 rounded-full shadow-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-300 transform hover:scale-105" disabled>
+                    Sortear
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal do Sorteio -->
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal-content">
+            <p class="text-xl mb-2">O número sorteado é:</p>
+            <div id="winning-number" class="winning-number"></div>
+            <p id="winning-name" class="text-2xl mt-4 font-bold"></p>
+            <p class="text-lg mt-4">Parabéns!</p>
+            <button id="close-modal-button" class="mt-6 bg-red-600 text-white font-bold py-2 px-4 rounded-full shadow-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300">
+                Fechar
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Seleciona os elementos do DOM
+        const drawButton = document.getElementById('draw-button');
+        const modalOverlay = document.getElementById('modal-overlay');
+        const winningNumberSpan = document.getElementById('winning-number');
+        const winningNameSpan = document.getElementById('winning-name');
+        const closeModalButton = document.getElementById('close-modal-button');
+        const fileInput = document.getElementById('file-input');
+        const fileStatusMessage = document.getElementById('file-status-message');
+
+        // A "base de dados" será carregada a partir do arquivo
+        let participants = [];
+
+        // Adiciona um evento de escuta para a mudança no arquivo
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                fileStatusMessage.textContent = 'Nenhum arquivo selecionado.';
+                drawButton.disabled = true;
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    // Tenta fazer o parse do conteúdo como JSON
+                    participants = JSON.parse(e.target.result);
+                    if (participants.length > 0) {
+                        fileStatusMessage.textContent = `Arquivo carregado com sucesso! ${participants.length} participantes encontrados.`;
+                        drawButton.disabled = false;
+                    } else {
+                        fileStatusMessage.textContent = 'Arquivo JSON carregado, mas a lista está vazia.';
+                        drawButton.disabled = true;
+                    }
+                } catch (error) {
+                    fileStatusMessage.textContent = 'Erro ao processar o arquivo. Certifique-se de que é um JSON válido.';
+                    drawButton.disabled = true;
+                    console.error('Erro de parse JSON:', error);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // Adiciona um evento de clique ao botão de sorteio
+        drawButton.addEventListener('click', () => {
+            // Desabilita o botão para evitar múltiplos cliques
+            drawButton.disabled = true;
+            drawButton.textContent = 'Sorteando...';
+
+            // Reseta a animação e o texto do modal
+            winningNumberSpan.textContent = '';
+            winningNameSpan.textContent = '';
+            winningNumberSpan.classList.remove('pulse-animation');
+
+            // Exibe o modal
+            modalOverlay.style.display = 'flex';
+
+            // Animação de rolagem dos números e nomes
+            let counter = 0;
+            const animationInterval = setInterval(() => {
+                if (participants.length === 0) {
+                    winningNumberSpan.textContent = '---';
+                    winningNameSpan.textContent = 'Nenhum participante';
+                    clearInterval(animationInterval);
+                    return;
+                }
+                const randomIndex = Math.floor(Math.random() * participants.length);
+                const randomParticipant = participants[randomIndex];
+                winningNumberSpan.textContent = randomParticipant.number;
+                winningNameSpan.textContent = randomParticipant.name;
+                counter++;
+                // Para a animação após 20 iterações (aproximadamente 2 segundos)
+                if (counter > 20) {
+                    clearInterval(animationInterval);
+                    // Sorteia o vencedor final
+                    const finalIndex = Math.floor(Math.random() * participants.length);
+                    const finalWinner = participants[finalIndex];
+                    winningNumberSpan.textContent = finalWinner.number;
+                    winningNameSpan.textContent = finalWinner.name;
+                    winningNumberSpan.classList.add('pulse-animation');
+                    
+                    // Reabilita o botão
+                    drawButton.disabled = false;
+                    drawButton.textContent = 'Sortear';
+                }
+            }, 100); // Roda a cada 100ms
+        });
+
+        // Adiciona um evento de clique para fechar o modal
+        closeModalButton.addEventListener('click', () => {
+            modalOverlay.style.display = 'none';
+        });
+
+        // Opcional: Fechar o modal clicando fora dele
+        modalOverlay.addEventListener('click', (event) => {
+            if (event.target === modalOverlay) {
+                modalOverlay.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
